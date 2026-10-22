@@ -1,0 +1,81 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Property Desk · Sign in</title>
+<link rel="icon" href="icon.svg">
+<style>
+:root{--bg:#f4f2ec;--card:#fff;--ink:#1c1b19;--muted:#6b6862;--line:#dcd8cf;--accent:#1f5c4a;--accent-ink:#fff;--bad:#a83a3a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171716;--card:#22211f;--ink:#efede6;--muted:#a19e96;--line:#3a3833;--accent:#4fa58a;--accent-ink:#0d1a15;--bad:#e07575}}
+:root[data-theme="dark"]{--bg:#171716;--card:#22211f;--ink:#efede6;--muted:#a19e96;--line:#3a3833;--accent:#4fa58a;--accent-ink:#0d1a15;--bad:#e07575}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:400px;margin:12vh auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px}
+h1{font-size:20px;margin:0 0 4px}
+p.sub{color:var(--muted);margin:0 0 20px}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink);font:inherit}
+button{width:100%;margin-top:16px;padding:11px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:600 15px system-ui,sans-serif;cursor:pointer}
+button.link{background:none;color:var(--accent);margin-top:8px;padding:6px;font-weight:500}
+.msg{margin-top:14px;font-size:14px;min-height:1.5em}
+.msg.bad{color:var(--bad)}
+[hidden]{display:none!important}
+</style></head><body>
+<main><div class="card">
+  <h1>Property Desk</h1>
+  <p class="sub">Moose Management. Same sign-in as the Maintenance Desk.</p>
+
+  <form id="signin">
+    <label for="em">Work email</label><input id="em" type="email" autocomplete="username" required>
+    <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password">
+    <button type="submit">Sign in</button>
+    <button type="button" class="link" id="magic">First time or forgot? Email me a link</button>
+  </form>
+
+  <form id="setpw" hidden>
+    <label for="p1">Choose a password (10+ characters)</label><input id="p1" type="password" autocomplete="new-password" minlength="10" required>
+    <label for="p2">Again</label><input id="p2" type="password" autocomplete="new-password" minlength="10" required>
+    <button type="submit">Save password and open the desk</button>
+  </form>
+
+  <div class="msg" id="msg" role="status"></div>
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+  var C = window.PD_CONFIG;
+  var sb = supabase.createClient(C.url, C.anonKey, { auth:{ persistSession:true, detectSessionInUrl:true, flowType:"implicit" } });
+  var $ = function(id){ return document.getElementById(id); };
+  function say(t, bad){ $("msg").textContent = t; $("msg").className = "msg" + (bad ? " bad" : ""); }
+  function wantPw(){ return new URLSearchParams(location.search).get("pw") === "1"; }
+  async function route(){
+    var s = (await sb.auth.getSession()).data.session;
+    if(s && wantPw()){ $("signin").hidden = true; $("setpw").hidden = false; say("Signed in as " + s.user.email + "."); return; }
+    if(s){ location.href = "desk.html"; return; }
+    $("signin").hidden = false; $("setpw").hidden = true;
+  }
+  $("signin").onsubmit = async function(e){
+    e.preventDefault();
+    if(!$("pw").value){ say("Type your password, or use the email link.", true); return; }
+    say("Signing in…");
+    var r = await sb.auth.signInWithPassword({ email:$("em").value.trim(), password:$("pw").value });
+    if(r.error){ say("That didn't work: " + r.error.message, true); return; }
+    location.href = "desk.html";
+  };
+  $("magic").onclick = async function(){
+    var em = $("em").value.trim(); if(!em){ say("Type your email first.", true); return; }
+    say("Sending…");
+    var r = await sb.auth.signInWithOtp({ email:em, options:{ shouldCreateUser:true, emailRedirectTo: location.origin + location.pathname + "?pw=1" } });
+    say(r.error ? ("Couldn't send it: " + r.error.message) : "Check your email for the sign-in link.", !!r.error);
+  };
+  $("setpw").onsubmit = async function(e){
+    e.preventDefault();
+    if($("p1").value !== $("p2").value){ say("The two passwords don't match.", true); return; }
+    var r = await sb.auth.updateUser({ password:$("p1").value });
+    if(r.error){ say("Password not saved: " + r.error.message, true); return; }
+    location.href = "desk.html";
+  };
+  sb.auth.onAuthStateChange(function(ev){ if(ev === "SIGNED_IN") route(); });
+  route();
+})();
+</script>
+</body></html>
